@@ -1,0 +1,8 @@
+namespace: content
+name: nginx-static-content
+nameservice: nginx-static-content-service
+image: f6987c8d6ed5/diplom_netology
+app: nginx-static-content
+port: 80
+version: 1.09
+
