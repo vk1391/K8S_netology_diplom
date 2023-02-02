@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: atlantis
+  namespace: atlantis
+spec:
+  serviceName: atlantis
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      app: atlantis
+  template:
+    metadata:
+      labels:
+        app: atlantis
+    spec:
+      securityContext:
+        fsGroup: 1000 # Atlantis group (1000) read/write access to volumes.
+      containers:
+      - name: atlantis
+        image: ghcr.io/runatlantis/atlantis:v0.22.3 # 1. Replace <VERSION> with the most recent release.
+        env:
+        - name: ATLANTIS_REPO_ALLOWLIST
+          value: github.com/vk1391/diplom_devops_terraform/* # 2. Replace this with your own repo allowlist.
+
+        ### GitHub Config ###
+        - name: ATLANTIS_GH_USER
+          value: vk1391 # 3i. If you're using GitHub replace <YOUR_GITHUB_USER> with the username of your Atlantis GitHub user without the `@`.
+        - name: ATLANTIS_GH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: atlantis-vcs
+              key: token_github
+        - name: ATLANTIS_GH_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: atlantis-vcs
+              key: webhook-secret
+        ### End GitHub Config ###
+        - name: ATLANTIS_DATA_DIR
+          value: /atlantis
+        - name: ATLANTIS_PORT
+          value: "4141" # Kubernetes sets an ATLANTIS_PORT variable so we need to override.
+        volumeMounts:
+        - name: atlantis-data
+          mountPath: /atlantis
+        ports:
+        - name: atlantis
+          containerPort: 4141
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 100m
+        livenessProbe:
+          # We only need to check every 60s since Atlantis is not a
+          # high-throughput service.
+          periodSeconds: 60
+          httpGet:
+            path: /healthz
+            port: 4141
+            # If using https, change this to HTTPS
+            scheme: HTTP
+        #readinessProbe:
+         # periodSeconds: 60
+          #httpGet:
+           # path: /healthz
+            #port: 4141
+            ## If using https, change this to HTTPS
+            #scheme: HTTP
+      volumes:
+        - name: atlantis-data
+          persistentVolumeClaim:
+              claimName: atlantis-pv-claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlantis
+  namespace: atlantis
+spec:
+  type: NodePort
+  ports:
+  - name: atlantis
+    port: 80
+    targetPort: 4141
+    nodePort: 30003
+  selector:
+    app: atlantis
